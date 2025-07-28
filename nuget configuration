@@ -1,0 +1,136 @@
+"D:\falcon-repo\praband-prototype\Scripts\dependencies\Philips.iControl.cmake"
+
+set(COMPONENTS_DIR "${CMAKE_BINARY_DIR}/Components/Production")
+
+project(Philips.iControl)
+
+find_package(sscf REQUIRED)
+find_package(icontrol REQUIRED)
+
+add_library(
+  ${PROJECT_NAME}
+  ${ICONTROL_SRC_FILES}
+  "${ICONTROL_SRC}/src-gen/cpp11/cppCode/iGeometryStateV2.h"
+  "${ICONTROL_SRC}/src-gen/cpp11/cppCode/iGeometryStateV2.hpp"
+  "${ICONTROL_SRC}/src-cpp/igeometrystateV2.cpp"
+)
+
+set_target_properties(Philips.iControl PROPERTIES
+  ARCHIVE_OUTPUT_DIRECTORY "${COMPONENTS_DIR}"
+  LIBRARY_OUTPUT_DIRECTORY "${COMPONENTS_DIR}"
+  RUNTIME_OUTPUT_DIRECTORY "${COMPONENTS_DIR}"
+)
+
+target_include_directories(${PROJECT_NAME} PUBLIC "${ICONTROL_SRC}")
+
+target_link_libraries(
+  ${PROJECT_NAME}
+  PUBLIC sscf::sscf
+)
+
+install(TARGETS ${PROJECT_NAME})
+
+set_target_properties(${PROJECT_NAME} PROPERTIES CXX_CLANG_TIDY "")
+
+target_compile_options(${PROJECT_NAME} PUBLIC /wd4244 /wd4819 /wd4828)
+
+
+
+------------------------------------------------------------------------------------------------
+"D:\falcon-repo\praband-prototype\Scripts\dependencies\Philips.IpSimplicity.cmake"
+
+include_guard(GLOBAL)
+
+set(_BCONFIG ${CMAKE_BUILD_TYPE})
+set(_CONFIG "")
+if(${_BCONFIG} MATCHES "Debug|_DEBUG")
+    set(_CONFIG "d")
+endif()
+
+if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+    set(_PLATFORM "x64")
+elseif(CMAKE_SIZEOF_VOID_P EQUAL 4)
+    set(_PLATFORM "Win32")
+else()
+    message(FATAL_ERROR "Unknown platform architecture type detected!")
+endif()
+
+set(_ROOT_DIR ${CMAKE_SOURCE_DIR}/packages/Philips.IpSimplicity)
+
+add_library(ip_simplicity STATIC IMPORTED GLOBAL)
+set_target_properties(ip_simplicity PROPERTIES
+    IMPORTED_LOCATION ${_ROOT_DIR}/IpSimplicity/lib/v143/${_PLATFORM}/IpSimplicity${_CONFIG}.lib
+    INTERFACE_INCLUDE_DIRECTORIES "${_ROOT_DIR}/IpSimplicity/include;${_ROOT_DIR}/Medisys/include"
+    INTERFACE_LINK_LIBRARIES "shlwapi.lib;ws2_32.lib;mswsock.lib;iphlpapi.lib"
+)
+
+
+------------------------------------------------------------------------
+"D:\falcon-repo\praband-prototype\Scripts\cmake\NuGet.cmake"
+
+include_guard(GLOBAL)
+
+find_program(NUGET_TOOL NuGet REQUIRED)
+
+if(PACKAGE_DEFINITION_DIR)
+    list(APPEND CMAKE_MODULE_PATH ${PACKAGE_DEFINITION_DIR})
+endif()
+
+function(install_nuget_package NAME VERSION)
+    message(STATUS "${NAME} ${VERSION}")
+
+    set(_PACK_DIR ${CMAKE_SOURCE_DIR}/packages)
+    set(_PACK_BUILD_DIR ${_PACK_DIR}/${NAME}/build)
+	
+	if(EXISTS ${_PACK_BUILD_DIR})
+		list(APPEND CMAKE_MODULE_PATH ${_PACK_BUILD_DIR})
+        include(${NAME})
+        return()
+	endif()
+	
+    if(NOT EXISTS ${_PACK_BUILD_DIR})
+        message(TRACE "Installing package ${NAME}...")
+        execute_process(
+            COMMAND ${NUGET_TOOL} install ${NAME}
+                -Version ${VERSION}
+                -OutputDirectory ${_PACK_DIR}
+                -ExcludeVersion
+                -Prerelease
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+            OUTPUT_QUIET
+            COMMAND_ERROR_IS_FATAL ANY
+        )
+        message(TRACE "Package ${NAME} installed")
+    else()
+        message(TRACE "Package ${NAME} already installed")
+    endif()
+
+    if(EXISTS ${_PACK_BUILD_DIR}/${NAME}.cmake)
+        message(TRACE "Package definition loaded from NuGet package")
+		message(STATUS "Package definition loaded from NuGet package")
+        list(APPEND CMAKE_MODULE_PATH ${_PACK_BUILD_DIR})
+        include(${NAME})
+    elseif(PACKAGE_DEFINITION_DIR AND EXISTS ${PACKAGE_DEFINITION_DIR})
+        if(EXISTS ${PACKAGE_DEFINITION_DIR}/${NAME}.cmake)
+			message(TRACE "Package definition loaded from definition's directory")
+            include(${NAME})
+        else()
+            message(WARNING "Unable to use dependency ${NAME}!")
+        endif()
+    else()
+        message(WARNING "Unable to use dependency ${NAME}!")
+    endif()
+
+endfunction()
+
+--------------------------------------------------------------------------------
+
+
+#cmake main file
+
+  list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/Scripts/cmake)
+  # Install dependencies
+  set(PACKAGE_DEFINITION_DIR ${CMAKE_SOURCE_DIR}/Scripts/dependencies)
+  include(NuGet)
+
+  install_nuget_package(Philips.IpSimplicity 40.0.7)
